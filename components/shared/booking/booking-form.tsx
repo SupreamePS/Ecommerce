@@ -1,15 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { BOOKING_CONSTANTS } from "@/lib/constants/booking";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown, Calendar as CalendarIcon, Clock, Users, MapPin } from "lucide-react";
 
+type Branch = {
+    id: number;
+    name: string;
+    address: string;
+};
+
 export default function BookingForm() {
     const [submitted, setSubmitted] = useState(false);
     const [formData, setFormData] = useState({
-        branch: "",
+        branch_id: "",
         date: "",
         time: "",
         guests: "",
@@ -17,6 +23,47 @@ export default function BookingForm() {
         phone: "",
         email: ""
     });
+    const [branches, setBranches] = useState<Branch[]>([]);
+
+
+    const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+    const [isLoadingTimes, setIsLoadingTimes] = useState(false);
+
+    // Fetch Branches
+    useEffect(() => {
+        fetch('/api/branches')
+            .then(res => res.json())
+            .then(data => setBranches(data))
+            .catch(err => console.error("Failed to fetch branches", err));
+    }, []);
+
+    // Fetch availability when date, branch, or guests change
+    useEffect(() => {
+        const fetchAvailability = async () => {
+            if (!formData.date || !formData.branch_id || !formData.guests) return;
+
+            setIsLoadingTimes(true);
+            try {
+                const params = new URLSearchParams({
+                    date: formData.date,
+                    branch_id: formData.branch_id,
+                    guests: formData.guests
+                });
+                const res = await fetch(`/api/availability?${params}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableTimes(data.availableSlots || []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch availability:", error);
+            } finally {
+                setIsLoadingTimes(false);
+            }
+        };
+
+        const timer = setTimeout(fetchAvailability, 300); // Debounce
+        return () => clearTimeout(timer);
+    }, [formData.date, formData.branch_id, formData.guests]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -69,12 +116,13 @@ export default function BookingForm() {
         <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-8">
             {/* Branch Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {BOOKING_CONSTANTS.branches.map((branch) => (
+                {branches.length === 0 && <div className="text-white">Loading branches...</div>}
+                {branches.map((branch) => (
                     <label
                         key={branch.id}
                         className={cn(
                             "cursor-pointer relative p-4 rounded-xl border transition-all duration-300",
-                            formData.branch === branch.id
+                            formData.branch_id === branch.id.toString()
                                 ? "bg-primary/10 border-primary"
                                 : "bg-black/40 border-white/10 hover:border-white/30"
                         )}
@@ -83,15 +131,15 @@ export default function BookingForm() {
                             type="radio"
                             name="branch"
                             value={branch.id}
-                            checked={formData.branch === branch.id}
-                            onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                            checked={formData.branch_id === branch.id.toString()}
+                            onChange={(e) => setFormData({ ...formData, branch_id: e.target.value.toString() })}
                             className="absolute opacity-0 w-full h-full inset-0 cursor-pointer"
                             required
                         />
                         <div className="flex items-center gap-3">
-                            <MapPin className={formData.branch === branch.id ? "text-primary" : "text-neutral-500"} size={20} />
+                            <MapPin className={formData.branch_id === branch.id.toString() ? "text-primary" : "text-neutral-500"} size={20} />
                             <div>
-                                <div className={cn("font-semibold", formData.branch === branch.id ? "text-primary" : "text-white")}>
+                                <div className={cn("font-semibold", formData.branch_id === branch.id.toString() ? "text-primary" : "text-white")}>
                                     {branch.name}
                                 </div>
                                 <div className="text-xs text-neutral-400">{branch.address}</div>
@@ -103,6 +151,24 @@ export default function BookingForm() {
 
             {/* Details Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label className={labelClasses}>{BOOKING_CONSTANTS.labels.guests}</label>
+                    <div className="relative">
+                        <select
+                            required
+                            className={cn(inputClasses, "appearance-none")}
+                            onChange={(e) => setFormData({ ...formData, guests: e.target.value })}
+                            defaultValue=""
+                        >
+                            <option value="" disabled>Guests</option>
+                            {BOOKING_CONSTANTS.partySizes.map(size => (
+                                <option key={size} value={size} className="bg-neutral-900">{size} {size === 1 ? 'Person' : 'People'}</option>
+                            ))}
+                        </select>
+                        <Users className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" size={18} />
+                    </div>
+                </div>
+
                 <div>
                     <label className={labelClasses}>{BOOKING_CONSTANTS.labels.date}</label>
                     <div className="relative">
@@ -121,36 +187,26 @@ export default function BookingForm() {
                     <div className="relative">
                         <select
                             required
-                            className={cn(inputClasses, "appearance-none")}
+                            className={cn(inputClasses, "appearance-none", isLoadingTimes && "opacity-50")}
                             onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                             defaultValue=""
+                            disabled={isLoadingTimes || !availableTimes.length}
                         >
-                            <option value="" disabled>Select Time</option>
-                            {BOOKING_CONSTANTS.timeSlots.map(time => (
-                                <option key={time} value={time} className="bg-neutral-900">{time}</option>
-                            ))}
+                            <option value="" disabled>
+                                {isLoadingTimes ? "Loading..." : availableTimes.length ? "Select Time" : "No slots available"}
+                            </option>
+                            {availableTimes.length > 0 ? (
+                                availableTimes.map(time => (
+                                    <option key={time} value={time} className="bg-neutral-900">{time}</option>
+                                ))
+                            ) : (
+                                !formData.date || !formData.branch_id ? null : <option disabled>No time slots available</option>
+                            )}
                         </select>
                         <Clock className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" size={18} />
                     </div>
                 </div>
 
-                <div>
-                    <label className={labelClasses}>{BOOKING_CONSTANTS.labels.guests}</label>
-                    <div className="relative">
-                        <select
-                            required
-                            className={cn(inputClasses, "appearance-none")}
-                            onChange={(e) => setFormData({ ...formData, guests: e.target.value })}
-                            defaultValue=""
-                        >
-                            <option value="" disabled>Guests</option>
-                            {BOOKING_CONSTANTS.partySizes.map(size => (
-                                <option key={size} value={size} className="bg-neutral-900">{size} {size === 1 ? 'Person' : 'People'}</option>
-                            ))}
-                        </select>
-                        <Users className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" size={18} />
-                    </div>
-                </div>
             </div>
 
             {/* Contact Info */}

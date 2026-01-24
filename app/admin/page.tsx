@@ -2,22 +2,39 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Search, Trash2, Calendar as CalendarIcon, Clock, MapPin, Users, Phone, Mail, User, Grid, List as ListIcon, ChevronLeft, ChevronRight, Download, Columns, ArrowUpDown } from "lucide-react";
+import { Lock, Search, Trash2, Calendar as CalendarIcon, Clock, MapPin, Users, Phone, Mail, User, Grid, List as ListIcon, ChevronLeft, ChevronRight, Download, Columns, ArrowUpDown, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addHours, isBefore, isAfter } from "date-fns";
 
 // Types
 type Reservation = {
     id: string;
     timestamp: string;
     branch: string;
+    branch_id: number;
     date: string;
     time: string;
+    end_time?: string;
     guests: string;
     name: string;
     phone: string;
     email: string;
     status: string;
+    table_number?: string;
+};
+
+type Table = {
+    id: number;
+    branch_id: number;
+    table_number: string;
+    capacity_min: number;
+    capacity_max: number;
+};
+
+type Branch = {
+    id: number;
+    name: string;
+    address: string;
 };
 
 export default function AdminPage() {
@@ -32,6 +49,36 @@ export default function AdminPage() {
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
     const [selectedBranch, setSelectedBranch] = useState<"all" | "liabduan" | "rama9">("all");
 
+    // Booking Modal State
+    // Booking Modal State
+    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+    const [bookingForm, setBookingForm] = useState({
+        branch_id: "",
+        date: format(new Date(), "yyyy-MM-dd"),
+        time: "",
+        guests: "2",
+        name: "",
+        phone: "",
+        email: "",
+        table_number: ""
+    });
+    const [adminAvailableTimes, setAdminAvailableTimes] = useState<string[]>([]);
+    const [tables, setTables] = useState<Table[]>([]);
+    const [branches, setBranches] = useState<Branch[]>([]);
+    const [isFetchingAvailability, setIsFetchingAvailability] = useState(false);
+    const [isTablesLoading, setIsTablesLoading] = useState(false);
+
+    // Edit Modal State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingBooking, setEditingBooking] = useState<Reservation | null>(null);
+    const [editForm, setEditForm] = useState({
+        table_number: "",
+        status: "",
+        date: "",
+        time: "",
+        end_time: ""
+    });
+
     // Check session on mount
     useEffect(() => {
         const auth = sessionStorage.getItem("admin_auth");
@@ -41,6 +88,20 @@ export default function AdminPage() {
         } else {
             setIsLoading(false);
         }
+    }, []);
+
+    useEffect(() => {
+        // Fetch branches
+        fetch('/api/branches')
+            .then(res => res.json())
+            .then(data => {
+                setBranches(data);
+                // Set default booking branch if loaded
+                if (data.length > 0) {
+                    setBookingForm(prev => ({ ...prev, branch_id: data[0].id.toString() }));
+                }
+            })
+            .catch(err => console.error(err));
     }, []);
 
     const loadReservations = async () => {
@@ -54,6 +115,167 @@ export default function AdminPage() {
             console.error("Failed to load reservations:", error);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // Admin Booking Logic
+    useEffect(() => {
+        if (isBookingModalOpen && bookingForm.branch_id) {
+            fetchTables(parseInt(bookingForm.branch_id));
+        }
+    }, [isBookingModalOpen, bookingForm.branch_id]);
+
+    useEffect(() => {
+        // Fetch availability when basic params change
+        const fetchAvail = async () => {
+            if (!bookingForm.date || !bookingForm.branch_id || !bookingForm.guests) return;
+            setIsFetchingAvailability(true);
+            try {
+                const params = new URLSearchParams({
+                    date: bookingForm.date,
+                    branch_id: bookingForm.branch_id, // Use ID
+                    guests: bookingForm.guests
+                });
+                const res = await fetch(`/api/availability?${params}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAdminAvailableTimes(data.availableSlots || []);
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setIsFetchingAvailability(false);
+            }
+        };
+        const timer = setTimeout(fetchAvail, 300);
+        return () => clearTimeout(timer);
+    }, [bookingForm.date, bookingForm.branch_id, bookingForm.guests]);
+
+    const fetchTables = async (branchId: number) => {
+        setIsTablesLoading(true);
+        try {
+            const res = await fetch(`/api/tables?branch=${branchId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setTables(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch tables", error);
+            setTables([]);
+        } finally {
+            setIsTablesLoading(false);
+        }
+    };
+
+    const handleCreateBooking = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const res = await fetch('/api/bookings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bookingForm)
+            });
+            if (res.ok) {
+                alert("Booking created successfully!");
+                setIsBookingModalOpen(false);
+                loadReservations();
+                // Reset form
+                setBookingForm({
+                    branch_id: branches.length > 0 ? branches[0].id.toString() : "",
+                    date: format(new Date(), "yyyy-MM-dd"),
+                    time: "",
+                    guests: "2",
+                    name: "",
+                    phone: "",
+                    email: "",
+                    table_number: ""
+                });
+            } else {
+                alert("Failed to create booking");
+            }
+        } catch (error) {
+            console.error("Error creating booking:", error);
+            alert("Error creating booking");
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this booking?")) return;
+        try {
+            const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                loadReservations();
+            } else {
+                alert("Failed to delete");
+            }
+        } catch (error) {
+            console.error("Error deleting:", error);
+        }
+    };
+
+    const handleEditClick = (booking: Reservation) => {
+        setEditingBooking(booking);
+        setEditForm({
+            table_number: booking.table_number || "",
+            status: booking.status,
+            date: booking.date,
+            time: booking.time,
+            end_time: booking.end_time || ""
+        });
+        setIsEditModalOpen(true);
+        // Force refresh tables to check current DB status
+        if (booking.branch_id) fetchTables(booking.branch_id);
+    };
+
+    const handleFinishBooking = async () => {
+        if (!editingBooking) return;
+        if (!confirm("Are you sure? This will update end time to NOW and free up the table.")) return;
+
+        const now = new Date();
+        const endTimeStr = format(now, 'HH:mm');
+
+        try {
+            // We use PATCH passing end_time
+            const res = await fetch(`/api/bookings/${editingBooking.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ end_time: endTimeStr, status: 'completed' })
+            });
+
+            if (res.ok) {
+                alert("Booking finished and table freed!");
+                setIsEditModalOpen(false);
+                setEditingBooking(null);
+                loadReservations();
+            } else {
+                alert("Failed");
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const handleUpdateBooking = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingBooking) return;
+
+        try {
+            // We need a new API endpoint for PATCH/PUT.
+            // For now, let's assume /api/bookings/[id] supports PATCH
+            const res = await fetch(`/api/bookings/${editingBooking.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editForm)
+            });
+
+            if (res.ok) {
+                alert("Booking updated!");
+                setIsEditModalOpen(false);
+                setEditingBooking(null);
+                loadReservations();
+            } else {
+                alert("Failed to update booking");
+            }
+        } catch (error) {
+            console.error("Error updating booking:", error);
         }
     };
 
@@ -81,8 +303,8 @@ export default function AdminPage() {
             const branchRes = reservations.filter(r => r.branch === branch);
             return {
                 total: branchRes.length,
-                confirmed: branchRes.filter(r => r.status === 'confirmed').length,
-                cancelled: branchRes.filter(r => r.status === 'cancelled').length
+                pending: branchRes.filter(r => r.status === 'pending' || !r.table_number).length,
+                confirmed: branchRes.filter(r => r.status === 'confirmed').length
             };
         };
 
@@ -112,6 +334,13 @@ export default function AdminPage() {
 
         // Branch Filter
         if (selectedBranch !== 'all') {
+            // selectedBranch handles "all" or specific name logic, but now we have IDs.
+            // Let's adapt selectedBranch to accept "all" | string (name or id?).
+            // Existing code uses 'liabduan'/'rama9' strings.
+            // If we want to strictly filter by ID, we should change selectedBranch type.
+            // But 'reservations' come with 'branch' name string (from API join) AND 'branch_id'.
+            // Simplest: Filter by branch name string if selectedBranch matches name, OR switch to ID.
+            // Let's stick to name for UI filter if `reservation` has `branch` name.
             filtered = filtered.filter(r => r.branch === selectedBranch);
         }
 
@@ -180,7 +409,52 @@ export default function AdminPage() {
         setViewMode("list"); // Switch to list to see details
     };
 
+    // Helper function for table availability checking
+    const getOccupiedTables = (checkBranchId: string | number, checkDate: string, checkTime: string, excludeBookingId?: string) => {
+        if (!checkBranchId || !checkDate || !checkTime) return [];
+
+        const startA = parseISO(`${checkDate}T${checkTime}`);
+        const endA = addHours(startA, 1);
+
+        const overlapping = reservations.filter(r => {
+            if (excludeBookingId && r.id === excludeBookingId) return false;
+            // Strict branch check - ensure types match (string vs number)
+            if (r.branch_id?.toString() !== checkBranchId.toString()) return false;
+            if (r.date !== checkDate) return false;
+            if (r.status === 'cancelled' || r.status === 'completed') return false; // Ignore completed/cancelled
+
+            // Calculate r end time
+            let endB = addHours(parseISO(`${r.date}T${r.time}`), 1);
+            if (r.end_time) {
+                // If end_time is HH:mm
+                endB = parseISO(`${r.date}T${r.end_time}`);
+            }
+            const startB = parseISO(`${r.date}T${r.time}`);
+
+            // Overlap check
+            // (StartA < EndB) and (EndA > StartB)
+            return isBefore(startA, endB) && isAfter(endA, startB);
+        });
+
+        // Collect all occupied table numbers
+        const occupied = new Set<string>();
+        overlapping.forEach(r => {
+            if (r.table_number) {
+                r.table_number.split(',').forEach(t => occupied.add(t.trim()));
+            }
+        });
+
+        return Array.from(occupied);
+    };
+
+    // Calculate occupied tables for New Booking form
+    const newBookingOccupiedTables = useMemo(() => {
+        return getOccupiedTables(bookingForm.branch_id, bookingForm.date, bookingForm.time);
+    }, [bookingForm.branch_id, bookingForm.date, bookingForm.time, reservations]);
+
+
     if (isLoading) return null;
+
 
     // LOGIN VIEW
     if (!isAuthenticated) {
@@ -237,6 +511,13 @@ export default function AdminPage() {
                         >
                             Logout
                         </button>
+                        <button
+                            onClick={() => setIsBookingModalOpen(true)}
+                            className="px-4 py-2 bg-primary text-black rounded-full hover:bg-white transition-colors text-sm font-bold flex items-center gap-2"
+                        >
+                            <Plus size={16} />
+                            New Booking
+                        </button>
                     </div>
                 </header>
 
@@ -244,9 +525,6 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Liabduan Stats */}
                     <div className="bg-neutral-900/50 border border-white/5 rounded-xl p-6 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <MapPin size={48} className="text-primary" />
-                        </div>
                         <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Liabduan Branch</h3>
                         <div className="grid grid-cols-3 gap-4 text-center">
                             <div>
@@ -254,21 +532,19 @@ export default function AdminPage() {
                                 <div className="text-xs text-neutral-400 mt-1 uppercase tracking-wider">Total</div>
                             </div>
                             <div>
-                                <div className="text-3xl font-bold text-green-500">{stats.liabduan.confirmed}</div>
-                                <div className="text-xs text-green-500/70 mt-1 uppercase tracking-wider">Confirmed</div>
+                                <div className="text-3xl font-bold text-yellow-500">{stats.liabduan.pending}</div>
+                                <div className="text-xs text-yellow-500/70 mt-1 uppercase tracking-wider">Pending</div>
                             </div>
                             <div>
-                                <div className="text-3xl font-bold text-red-500">{stats.liabduan.cancelled}</div>
-                                <div className="text-xs text-red-500/70 mt-1 uppercase tracking-wider">Cancelled</div>
+                                <div className="text-3xl font-bold text-green-500">{stats.liabduan.confirmed}</div>
+                                <div className="text-xs text-green-500/70 mt-1 uppercase tracking-wider">Confirmed</div>
                             </div>
                         </div>
                     </div>
 
                     {/* Rama 9 Stats */}
                     <div className="bg-neutral-900/50 border border-white/5 rounded-xl p-6 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <MapPin size={48} className="text-secondary" />
-                        </div>
+
                         <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Rama 9 Branch</h3>
                         <div className="grid grid-cols-3 gap-4 text-center">
                             <div>
@@ -276,12 +552,12 @@ export default function AdminPage() {
                                 <div className="text-xs text-neutral-400 mt-1 uppercase tracking-wider">Total</div>
                             </div>
                             <div>
-                                <div className="text-3xl font-bold text-green-500">{stats.rama9.confirmed}</div>
-                                <div className="text-xs text-green-500/70 mt-1 uppercase tracking-wider">Confirmed</div>
+                                <div className="text-3xl font-bold text-yellow-500">{stats.rama9.pending}</div>
+                                <div className="text-xs text-yellow-500/70 mt-1 uppercase tracking-wider">Pending</div>
                             </div>
                             <div>
-                                <div className="text-3xl font-bold text-red-500">{stats.rama9.cancelled}</div>
-                                <div className="text-xs text-red-500/70 mt-1 uppercase tracking-wider">Cancelled</div>
+                                <div className="text-3xl font-bold text-green-500">{stats.rama9.confirmed}</div>
+                                <div className="text-xs text-green-500/70 mt-1 uppercase tracking-wider">Confirmed</div>
                             </div>
                         </div>
                     </div>
@@ -292,19 +568,29 @@ export default function AdminPage() {
                     <div className="flex flex-wrap gap-4 items-center w-full">
 
                         {/* Branch Filter */}
+                        {/* Branch Filter */}
                         <div className="flex bg-neutral-900/50 border border-white/10 p-1 rounded-lg w-fit shrink-0">
-                            {['all', 'liabduan', 'rama9'].map((branch) => (
+                            <button
+                                onClick={() => setSelectedBranch('all')}
+                                className={cn(
+                                    "px-4 py-2 rounded-md transition-all text-sm font-medium capitalize",
+                                    selectedBranch === 'all' ? "bg-primary text-black shadow-lg" : "text-neutral-400 hover:text-white"
+                                )}
+                            >
+                                All Branches
+                            </button>
+                            {branches.map((branch) => (
                                 <button
-                                    key={branch}
-                                    onClick={() => setSelectedBranch(branch as any)}
+                                    key={branch.id}
+                                    onClick={() => setSelectedBranch(branch.name as any)}
                                     className={cn(
                                         "px-4 py-2 rounded-md transition-all text-sm font-medium capitalize",
-                                        selectedBranch === branch
+                                        selectedBranch === branch.name
                                             ? "bg-primary text-black shadow-lg"
                                             : "text-neutral-400 hover:text-white"
                                     )}
                                 >
-                                    {branch === 'all' ? 'All Branches' : branch}
+                                    {branch.name}
                                 </button>
                             ))}
                         </div>
@@ -546,13 +832,19 @@ export default function AdminPage() {
                                                 <th className="p-6 font-medium">Status</th>
                                                 <th className="p-6 font-medium">Customer</th>
                                                 <th className="p-6 font-medium">Branch</th>
+                                                <th className="p-6 font-medium">Table</th>
                                                 <th className="p-6 font-medium">Date & Time</th>
                                                 <th className="p-6 font-medium">Contact</th>
+                                                <th className="p-6 font-medium">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
                                             {filteredReservations.map((res) => (
-                                                <tr key={res.id} className="hover:bg-white/5 transition-colors">
+                                                <tr
+                                                    key={res.id}
+                                                    className="hover:bg-white/5 transition-colors cursor-pointer"
+                                                    onClick={() => handleEditClick(res)}
+                                                >
                                                     <td className="p-6">
                                                         <span className={cn(
                                                             "inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide",
@@ -581,6 +873,19 @@ export default function AdminPage() {
                                                         </div>
                                                     </td>
                                                     <td className="p-6">
+                                                        {res.table_number ? (
+                                                            <div className="inline-flex gap-1 flex-wrap">
+                                                                {res.table_number.split(',').map(t => (
+                                                                    <span key={t} className="bg-primary/20 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
+                                                                        {t}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-neutral-600 text-xs italic">Pending</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-6">
                                                         <div className="space-y-1">
                                                             <div className="flex items-center gap-2 text-white">
                                                                 <CalendarIcon size={16} className="text-neutral-500" />
@@ -604,6 +909,17 @@ export default function AdminPage() {
                                                             </div>
                                                         </div>
                                                     </td>
+                                                    <td className="p-6">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation(); // Prevent row click
+                                                                handleDelete(res.id);
+                                                            }}
+                                                            className="text-neutral-500 hover:text-red-500 transition-colors p-2 hover:bg-white/5 rounded-lg"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -614,6 +930,304 @@ export default function AdminPage() {
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* Booking Modal */}
+            <AnimatePresence>
+                {isBookingModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                        >
+                            <div className="sticky top-0 bg-neutral-900 border-b border-white/10 p-6 flex items-center justify-between z-10">
+                                <h2 className="text-xl font-bold text-white">New Reservation</h2>
+                                <button onClick={() => setIsBookingModalOpen(false)} className="text-neutral-400 hover:text-white">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCreateBooking} className="p-6 space-y-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Branch</label>
+                                        <select
+                                            value={bookingForm.branch_id}
+                                            onChange={e => setBookingForm({ ...bookingForm, branch_id: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white appearance-none"
+                                        >
+                                            {branches.map(b => (
+                                                <option key={b.id} value={b.id}>{b.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={bookingForm.date}
+                                            onChange={e => setBookingForm({ ...bookingForm, date: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Guests</label>
+                                        <select
+                                            value={bookingForm.guests}
+                                            onChange={e => setBookingForm({ ...bookingForm, guests: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white appearance-none"
+                                        >
+                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                                <option key={n} value={n}>{n} People</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Time</label>
+                                        <select
+                                            value={bookingForm.time}
+                                            required
+                                            disabled={isFetchingAvailability || adminAvailableTimes.length === 0}
+                                            onChange={e => setBookingForm({ ...bookingForm, time: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white appearance-none disabled:opacity-50"
+                                        >
+                                            <option value="" disabled>Select Time</option>
+                                            {adminAvailableTimes.map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-white/10 pt-6">
+                                    <h3 className="text-sm font-bold text-white mb-4">Customer Details</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="col-span-2">
+                                            <label className="block text-sm font-medium text-neutral-400 mb-2">Name</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="Customer Name"
+                                                value={bookingForm.name}
+                                                onChange={e => setBookingForm({ ...bookingForm, name: e.target.value })}
+                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-neutral-400 mb-2">Phone</label>
+                                            <input
+                                                type="tel"
+                                                required
+                                                placeholder="Phone Number"
+                                                value={bookingForm.phone}
+                                                onChange={e => setBookingForm({ ...bookingForm, phone: e.target.value })}
+                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-neutral-400 mb-2">Email</label>
+                                            <input
+                                                type="email"
+                                                placeholder="Email (Optional)"
+                                                value={bookingForm.email}
+                                                onChange={e => setBookingForm({ ...bookingForm, email: e.target.value })}
+                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-white/10 pt-6">
+                                    <h3 className="text-sm font-bold text-white mb-4">Table Allocation</h3>
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Assign Table (Optional)</label>
+                                        <select
+                                            value={bookingForm.table_number}
+                                            onChange={e => setBookingForm({ ...bookingForm, table_number: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white appearance-none"
+                                        >
+                                            <option value="">Auto-Decide / Pending</option>
+                                            {tables.map(table => {
+                                                const isOccupied = newBookingOccupiedTables.includes(table.table_number.toString());
+                                                return (
+                                                    <option
+                                                        key={table.id}
+                                                        value={table.table_number}
+                                                        disabled={isOccupied}
+                                                        className={isOccupied ? "text-red-500 bg-neutral-900" : ""}
+                                                    >
+                                                        {table.table_number} ({table.capacity_min}-{table.capacity_max} pax) {isOccupied ? "(Occupied)" : ""}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                        <p className="text-xs text-neutral-500 mt-2">
+                                            Leave blank to let functionality decide or mark as pending if complex.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsBookingModalOpen(false)}
+                                        className="flex-1 px-6 py-3 bg-white/5 text-white rounded-xl font-bold hover:bg-white/10 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-1 px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-white transition-colors shadow-lg shadow-primary/20"
+                                    >
+                                        Confirm Booking
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit Modal */}
+            <AnimatePresence>
+                {isEditModalOpen && editingBooking && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-md"
+                        >
+                            <div className="sticky top-0 bg-neutral-900 border-b border-white/10 p-6 flex items-center justify-between z-10 rounded-t-2xl">
+                                <h2 className="text-xl font-bold text-white">Edit Booking</h2>
+                                <button onClick={() => setIsEditModalOpen(false)} className="text-neutral-400 hover:text-white">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleUpdateBooking} className="p-6 space-y-6">
+                                <div>
+                                    <h3 className="text-white font-semibold mb-1">{editingBooking.name}</h3>
+                                    <p className="text-neutral-400 text-sm">
+                                        {format(parseISO(editingBooking.date), 'PPP')} at {editingBooking.time} ({editingBooking.guests} guests)
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Date</label>
+                                        <input
+                                            type="date"
+                                            value={editForm.date}
+                                            onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Time</label>
+                                        <input
+                                            type="time"
+                                            value={editForm.time}
+                                            onChange={e => setEditForm({ ...editForm, time: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                        />
+                                        <p className="text-xs text-neutral-500 mt-1">
+                                            Changing time will automatically update end time (1 hr duration).
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-400 mb-2">Select Table(s)</label>
+                                    <div className="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto p-1 relative">
+                                        {isTablesLoading && (
+                                            <div className="absolute inset-0 bg-neutral-900/80 flex items-center justify-center z-10 backdrop-blur-sm">
+                                                <div className="text-primary text-sm font-medium animate-pulse">Checking Availability...</div>
+                                            </div>
+                                        )}
+                                        {tables.sort((a, b) => parseInt(a.table_number) - parseInt(b.table_number)).map(table => {
+                                            const currentSelections = editForm.table_number ? editForm.table_number.split(',').map(s => s.trim()) : [];
+                                            const isSelected = currentSelections.includes(table.table_number.toString());
+
+                                            // Use shared availability check function with editForm values
+                                            const checkTime = editForm.time || '';
+                                            const checkDate = editForm.date || '';
+                                            const checkBranchId = editingBooking?.branch_id?.toString() || '';
+
+                                            const occupiedTables = getOccupiedTables(checkBranchId, checkDate, checkTime, editingBooking?.id);
+                                            const isOccupied = occupiedTables.includes(table.table_number.toString());
+                                            const isDisabled = isOccupied;
+
+                                            // Handle Toggle
+                                            const toggleTable = (tNum: string) => {
+                                                if (isDisabled) return;
+                                                let newSelections = [...currentSelections];
+                                                if (isSelected) {
+                                                    newSelections = newSelections.filter(s => s !== tNum);
+                                                } else {
+                                                    newSelections.push(tNum);
+                                                }
+                                                // Join and set
+                                                setEditForm({ ...editForm, table_number: newSelections.join(',') });
+                                            };
+
+                                            return (
+                                                <button
+                                                    key={table.id}
+                                                    type="button"
+                                                    onClick={() => toggleTable(table.table_number.toString())}
+                                                    disabled={isDisabled}
+                                                    className={cn(
+                                                        "p-3 rounded-xl border text-sm font-bold transition-all relative",
+                                                        isSelected
+                                                            ? "bg-primary text-black border-primary shadow-lg shadow-primary/20"
+                                                            : isDisabled
+                                                                ? "bg-neutral-800 text-neutral-600 border-white/5 cursor-not-allowed opacity-50"
+                                                                : "bg-white/5 text-white border-white/10 hover:border-primary/50 hover:bg-white/10"
+                                                    )}
+                                                >
+                                                    {table.table_number}
+                                                    <div className="text-[10px] font-normal opacity-70 mt-1">
+                                                        {table.capacity_min}-{table.capacity_max}p
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-xs text-neutral-500 mt-2">
+                                        Multi-select enabled. Red tables are occupied by other bookings at {editForm.time}.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsEditModalOpen(false)}
+                                        className="flex-1 px-6 py-3 bg-white/5 text-white rounded-xl font-bold hover:bg-white/10 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleFinishBooking}
+                                        className="flex-1 px-4 py-3 bg-green-600/20 text-green-400 border border-green-600/50 rounded-xl font-bold hover:bg-green-600/30 transition-colors"
+                                    >
+                                        Finish & Free Table
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="flex-1 px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-white transition-colors shadow-lg shadow-primary/20"
+                                    >
+                                        Update
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
