@@ -75,7 +75,6 @@ export async function PATCH(
             await client.query(query, values);
 
             console.log(`[Bookings API] ✅ Booking ${id} updated successfully`);
-            await client.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [id]);
             return NextResponse.json({ message: 'Booking updated' });
         } finally {
             client.release();
