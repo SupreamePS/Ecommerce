@@ -35,7 +35,7 @@ export default function AboutPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="text-xl text-neutral-400 max-w-2xl mx-auto"
+                        className="text-lg text-neutral-400 max-w-2xl mx-auto"
                     >
                         {ABOUT_CONTENT.subtitle}
                     </motion.p>

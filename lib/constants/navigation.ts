@@ -2,10 +2,10 @@ import { MapPin, Phone, Mail, Instagram, Facebook, Twitter } from 'lucide-react'
 
 export const NAV_LINKS = [
     { name: "Home", href: "/" },
-    { name: "Menu", href: "#menu" },
-    { name: "Experience", href: "#experience" },
+    { name: "Menu", href: "/#menu" },
+    { name: "Experience", href: "/#experience" },
     { name: "About", href: "/about" },
-    { name: "Locations", href: "#locations" },
+    { name: "Locations", href: "/#locations" },
 ];
 
 export const FOOTER_LOCATIONS = [
@@ -34,15 +34,14 @@ export const FOOTER_HOURS = {
 };
 
 export const FOOTER_SOCIALS = [
-    { icon: Instagram, href: "#" },
-    { icon: Facebook, href: "#" },
-    { icon: Twitter, href: "#" }
+    { icon: Instagram, href: "https://www.instagram.com/thaanfai.bkk/" },
+    { icon: Facebook, href: "https://www.facebook.com/profile.php?id=61567190462212" }
 ];
 
 export const FOOTER_EXPLORE = [
-    { name: "Our Menus", href: "#menu" },
-    { name: "Chef's Table", href: "#experience" },
-    { name: "Catering", href: "#catering" },
+    { name: "Our Menus", href: "/#menu" },
+    { name: "Chef's Table", href: "/#experience" },
+    { name: "Catering", href: "/#catering" },
     { name: "About Us", href: "/about" },
-    { name: "Careers", href: "#careers" },
+    { name: "Careers", href: "/#careers" },
 ];

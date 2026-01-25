@@ -9,7 +9,7 @@ export const HOME_INTRO = {
     text: [
         "At ",
         { text: "Thaanfai", highlight: true },
-        ", we don't just grill meat. We master the flame.",
+        ", we don't just grill meat. We master the flame. ",
         "A borderless exploration of flavor, cooked over primal heat."
     ]
 };
