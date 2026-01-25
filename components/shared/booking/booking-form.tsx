@@ -190,17 +190,22 @@ export default function BookingForm() {
                             className={cn(inputClasses, "appearance-none", isLoadingTimes && "opacity-50")}
                             onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                             defaultValue=""
-                            disabled={isLoadingTimes || !availableTimes.length}
+                            disabled={isLoadingTimes}
                         >
                             <option value="" disabled>
-                                {isLoadingTimes ? "Loading..." : availableTimes.length ? "Select Time" : "No slots available"}
+                                {isLoadingTimes
+                                    ? "Loading..."
+                                    : (!formData.date || !formData.branch_id || !formData.guests)
+                                        ? "Select Time"
+                                        : availableTimes.length
+                                            ? "Select Time"
+                                            : "No slots available"
+                                }
                             </option>
-                            {availableTimes.length > 0 ? (
+                            {availableTimes.length > 0 && (
                                 availableTimes.map(time => (
                                     <option key={time} value={time} className="bg-neutral-900">{time}</option>
                                 ))
-                            ) : (
-                                !formData.date || !formData.branch_id ? null : <option disabled>No time slots available</option>
                             )}
                         </select>
                         <Clock className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" size={18} />
