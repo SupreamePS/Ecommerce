@@ -258,12 +258,17 @@ export default function AdminPage() {
         if (!editingBooking) return;
 
         try {
-            // We need a new API endpoint for PATCH/PUT.
-            // For now, let's assume /api/bookings/[id] supports PATCH
+            // Prepare update data - if booking is pending and being updated, change to confirmed
+            const updateData = {
+                ...editForm,
+                // Auto-confirm if currently pending and we're making changes
+                status: editingBooking.status === 'pending' ? 'confirmed' : editForm.status
+            };
+
             const res = await fetch(`/api/bookings/${editingBooking.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(editForm)
+                body: JSON.stringify(updateData)
             });
 
             if (res.ok) {
