@@ -11,8 +11,8 @@ export async function PATCH(
         const body = await request.json();
 
         // Destructure possible fields
-        const { table_number, status, time, end_time } = body;
-        console.log(`[Bookings API] PATCH /${id} - Update request:`, { table_number, status, time, end_time });
+        const { table_number, status, time, end_time, guests } = body;
+        console.log(`[Bookings API] PATCH /${id} - Update request:`, { table_number, status, time, end_time, guests });
 
         const client = await pool.connect();
         try {
@@ -63,6 +63,10 @@ export async function PATCH(
             if (finalEndTime !== undefined) {
                 updates.push(`end_time = $${idx++}`);
                 values.push(finalEndTime);
+            }
+            if (guests !== undefined) {
+                updates.push(`guests = $${idx++}`);
+                values.push(parseInt(guests));
             }
 
             if (updates.length === 0) {

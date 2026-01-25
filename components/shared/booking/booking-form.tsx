@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { BOOKING_CONSTANTS } from "@/lib/constants/booking";
 import { cn } from "@/lib/utils";
-import { Check, ChevronDown, Calendar as CalendarIcon, Clock, Users, MapPin } from "lucide-react";
+import { Check, ChevronDown, Calendar as CalendarIcon, Clock, Users, MapPin, Loader2 } from "lucide-react";
 
 type Branch = {
     id: number;
@@ -28,6 +28,7 @@ export default function BookingForm() {
 
     const [availableTimes, setAvailableTimes] = useState<string[]>([]);
     const [isLoadingTimes, setIsLoadingTimes] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Fetch Branches
     useEffect(() => {
@@ -67,6 +68,7 @@ export default function BookingForm() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
         try {
             const res = await fetch('/api/bookings', {
@@ -81,9 +83,13 @@ export default function BookingForm() {
                 setSubmitted(true);
             } else {
                 console.error("Failed to submit booking");
+                alert("Failed to create booking. Please try again.");
             }
         } catch (error) {
             console.error("Error submitting booking:", error);
+            alert("An error occurred. Please try again.");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -154,17 +160,16 @@ export default function BookingForm() {
                 <div>
                     <label className={labelClasses}>{BOOKING_CONSTANTS.labels.guests}</label>
                     <div className="relative">
-                        <select
+                        <input
+                            type="number"
+                            min="1"
+                            max="20"
                             required
-                            className={cn(inputClasses, "appearance-none")}
+                            value={formData.guests}
+                            placeholder="Number of guests"
+                            className={inputClasses}
                             onChange={(e) => setFormData({ ...formData, guests: e.target.value })}
-                            defaultValue=""
-                        >
-                            <option value="" disabled>Guests</option>
-                            {BOOKING_CONSTANTS.partySizes.map(size => (
-                                <option key={size} value={size} className="bg-neutral-900">{size} {size === 1 ? 'Person' : 'People'}</option>
-                            ))}
-                        </select>
+                        />
                         <Users className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" size={18} />
                     </div>
                 </div>
@@ -253,9 +258,17 @@ export default function BookingForm() {
 
             <button
                 type="submit"
-                className="w-full bg-primary text-black font-bold py-4 rounded-full hover:bg-white transition-colors text-lg shadow-[0_0_20px_-5px_var(--color-primary)] hover:shadow-white/20 mt-8"
+                disabled={isSubmitting}
+                className="w-full bg-primary text-black font-bold py-4 rounded-full hover:bg-white transition-colors text-lg shadow-[0_0_20px_-5px_var(--color-primary)] hover:shadow-white/20 mt-8 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-                {BOOKING_CONSTANTS.labels.submit}
+                {isSubmitting ? (
+                    <>
+                        <Loader2 className="animate-spin" size={20} />
+                        Processing...
+                    </>
+                ) : (
+                    BOOKING_CONSTANTS.labels.submit
+                )}
             </button>
         </form>
     );

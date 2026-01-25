@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Search, Trash2, Calendar as CalendarIcon, Clock, MapPin, Users, Phone, Mail, User, Grid, List as ListIcon, ChevronLeft, ChevronRight, Download, Columns, ArrowUpDown, Plus, X } from "lucide-react";
+import { Lock, Search, Trash2, Calendar as CalendarIcon, Clock, MapPin, Users, Phone, Mail, User, Grid, List as ListIcon, ChevronLeft, ChevronRight, Download, Columns, ArrowUpDown, Plus, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addHours, isBefore, isAfter } from "date-fns";
 
@@ -76,8 +76,15 @@ export default function AdminPage() {
         status: "",
         date: "",
         time: "",
-        end_time: ""
+        end_time: "",
+        guests: ""
     });
+
+    // Loading states
+    const [isCreating, setIsCreating] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isFinishing, setIsFinishing] = useState(false);
 
     // Check session on mount
     useEffect(() => {
@@ -169,6 +176,8 @@ export default function AdminPage() {
 
     const handleCreateBooking = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsCreating(true);
+
         try {
             const res = await fetch('/api/bookings', {
                 method: 'POST',
@@ -195,21 +204,31 @@ export default function AdminPage() {
             }
         } catch (error) {
             console.error("Error creating booking:", error);
-            alert("Error creating booking");
+            alert("An error occurred. Please try again.");
+        } finally {
+            setIsCreating(false);
         }
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to delete this booking?")) return;
+
+        setIsDeleting(true);
         try {
-            const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/bookings/${id}`, {
+                method: 'DELETE',
+            });
+
             if (res.ok) {
                 loadReservations();
             } else {
-                alert("Failed to delete");
+                alert("Failed to delete booking");
             }
         } catch (error) {
-            console.error("Error deleting:", error);
+            console.error("Error deleting booking:", error);
+            alert("An error occurred. Please try again.");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -220,7 +239,8 @@ export default function AdminPage() {
             status: booking.status,
             date: booking.date,
             time: booking.time,
-            end_time: booking.end_time || ""
+            end_time: booking.end_time || "",
+            guests: booking.guests.toString()
         });
         setIsEditModalOpen(true);
         // Force refresh tables to check current DB status
@@ -234,6 +254,7 @@ export default function AdminPage() {
         const now = new Date();
         const endTimeStr = format(now, 'HH:mm');
 
+        setIsFinishing(true);
         try {
             // We use PATCH passing end_time
             const res = await fetch(`/api/bookings/${editingBooking.id}`, {
@@ -250,13 +271,19 @@ export default function AdminPage() {
             } else {
                 alert("Failed");
             }
-        } catch (e) { console.error(e); }
+        } catch (error) {
+            console.error("Error finishing booking:", error);
+            alert("An error occurred. Please try again.");
+        } finally {
+            setIsFinishing(false);
+        }
     };
 
     const handleUpdateBooking = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingBooking) return;
 
+        setIsUpdating(true);
         try {
             // Prepare update data - if booking is pending and being updated, change to confirmed
             const updateData = {
@@ -281,6 +308,9 @@ export default function AdminPage() {
             }
         } catch (error) {
             console.error("Error updating booking:", error);
+            alert("An error occurred. Please try again.");
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -979,15 +1009,16 @@ export default function AdminPage() {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-neutral-400 mb-2">Guests</label>
-                                        <select
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="50"
+                                            required
                                             value={bookingForm.guests}
                                             onChange={e => setBookingForm({ ...bookingForm, guests: e.target.value })}
-                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white appearance-none"
-                                        >
-                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                                                <option key={n} value={n}>{n} People</option>
-                                            ))}
-                                        </select>
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                            placeholder="Number of guests"
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-neutral-400 mb-2">Time</label>
@@ -1084,9 +1115,17 @@ export default function AdminPage() {
                                     </button>
                                     <button
                                         type="submit"
-                                        className="flex-1 px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-white transition-colors shadow-lg shadow-primary/20"
+                                        disabled={isCreating}
+                                        className="flex-1 px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-white transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        Confirm Booking
+                                        {isCreating ? (
+                                            <>
+                                                <Loader2 className="animate-spin" size={18} />
+                                                Creating...
+                                            </>
+                                        ) : (
+                                            "Confirm Booking"
+                                        )}
                                     </button>
                                 </div>
                             </form>
@@ -1141,6 +1180,19 @@ export default function AdminPage() {
                                         <p className="text-xs text-neutral-500 mt-1">
                                             Changing time will automatically update end time (1 hr duration).
                                         </p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-neutral-400 mb-2">Guests</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="50"
+                                            required
+                                            value={editForm.guests}
+                                            onChange={e => setEditForm({ ...editForm, guests: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
+                                            placeholder="Guest count"
+                                        />
                                     </div>
                                 </div>
 
@@ -1217,15 +1269,31 @@ export default function AdminPage() {
                                     <button
                                         type="button"
                                         onClick={handleFinishBooking}
-                                        className="flex-1 px-4 py-3 bg-green-600/20 text-green-400 border border-green-600/50 rounded-xl font-bold hover:bg-green-600/30 transition-colors"
+                                        disabled={isFinishing}
+                                        className="flex-1 px-4 py-3 bg-green-600/20 text-green-400 border border-green-600/50 rounded-xl font-bold hover:bg-green-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        Finish & Free Table
+                                        {isFinishing ? (
+                                            <>
+                                                <Loader2 className="animate-spin" size={16} />
+                                                Finishing...
+                                            </>
+                                        ) : (
+                                            "Finish & Free Table"
+                                        )}
                                     </button>
                                     <button
                                         type="submit"
-                                        className="flex-1 px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-white transition-colors shadow-lg shadow-primary/20"
+                                        disabled={isUpdating}
+                                        className="flex-1 px-6 py-3 bg-primary text-black rounded-xl font-bold hover:bg-white transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        Update
+                                        {isUpdating ? (
+                                            <>
+                                                <Loader2 className="animate-spin" size={18} />
+                                                Updating...
+                                            </>
+                                        ) : (
+                                            "Update"
+                                        )}
                                     </button>
                                 </div>
                             </form>
