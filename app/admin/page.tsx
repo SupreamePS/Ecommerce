@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Lock, Search, Trash2, Calendar as CalendarIcon, Clock, MapPin, Users, Phone, Mail, User, Grid, List as ListIcon, ChevronLeft, ChevronRight, Download, Columns, ArrowUpDown, Plus, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,8 +39,8 @@ type Branch = {
 };
 
 export default function AdminPage() {
+    const router = useRouter();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [pin, setPin] = useState("");
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [viewMode, setViewMode] = useState<"calendar" | "week" | "list">("calendar");
@@ -93,9 +94,9 @@ export default function AdminPage() {
             setIsAuthenticated(true);
             loadReservations();
         } else {
-            setIsLoading(false);
+            router.push("/admin/login");
         }
-    }, []);
+    }, [router]);
 
     useEffect(() => {
         // Fetch branches
@@ -314,22 +315,9 @@ export default function AdminPage() {
         }
     };
 
-    const handleLogin = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (pin === "1234") {
-            sessionStorage.setItem("admin_auth", "true");
-            setIsAuthenticated(true);
-            loadReservations();
-        } else {
-            alert("Invalid PIN");
-            setPin("");
-        }
-    };
-
     const handleLogout = () => {
         sessionStorage.removeItem("admin_auth");
-        setIsAuthenticated(false);
-        setPin("");
+        router.push("/admin/login");
     };
 
     // Stats Logic
@@ -488,46 +476,7 @@ export default function AdminPage() {
     }, [bookingForm.branch_id, bookingForm.date, bookingForm.time, reservations]);
 
 
-    if (isLoading) return null;
-
-
-    // LOGIN VIEW
-    if (!isAuthenticated) {
-        return (
-            <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="w-full max-w-md bg-neutral-900/50 border border-white/10 rounded-2xl p-8 backdrop-blur-xl"
-                >
-                    <div className="flex flex-col items-center mb-8">
-                        <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 text-white">
-                            <Lock size={24} />
-                        </div>
-                        <h1 className="text-2xl font-bold text-white">Admin Access</h1>
-                        <p className="text-neutral-400">Enter PIN to view reservations</p>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="space-y-4">
-                        <input
-                            type="password"
-                            value={pin}
-                            onChange={(e) => setPin(e.target.value)}
-                            placeholder="Entr PIN (1234)"
-                            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white text-center text-lg tracking-widest placeholder:text-neutral-600 focus:outline-none focus:border-primary/50 transition-colors"
-                            autoFocus
-                        />
-                        <button
-                            type="submit"
-                            className="w-full bg-primary text-black font-bold py-3 rounded-lg hover:bg-white transition-colors"
-                        >
-                            Unlock Dashboard
-                        </button>
-                    </form>
-                </motion.div>
-            </div>
-        );
-    }
+    if (isLoading || !isAuthenticated) return null;
 
     // DASHBOARD VIEW
     return (
