@@ -10,7 +10,19 @@ export async function POST(request: Request) {
         // Note: Frontend might still send 'branch' name if not updated yet, but we expect branch_id.
         // Let's fallback or require branch_id. Plan says updated frontend.
 
-        // Server-side validation could go here
+        // Server-side validation
+        const selectedDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+            return NextResponse.json({ error: 'Cannot book in the past' }, { status: 400 });
+        }
+
+        if (selectedDate.getDay() === 1) { // 1 is Monday
+            return NextResponse.json({ error: 'Restaurant is closed on Mondays' }, { status: 400 });
+        }
+
         const timestamp = new Date().toISOString();
 
         // Calculate End Time (1 hour duration)
@@ -138,6 +150,18 @@ export async function GET() {
     try {
         const client = await pool.connect();
         try {
+            // Auto-complete expired bookings: 
+            // If date + end_time is in the past and status is 'confirmed', set to 'completed'
+            const updateResult = await client.query(`
+                UPDATE bookings 
+                SET status = 'completed' 
+                WHERE status = 'confirmed' 
+                AND (date || ' ' || end_time)::timestamp < NOW() AT TIME ZONE 'UTC' + INTERVAL '7 hours'
+            `);
+            if (updateResult.rowCount && updateResult.rowCount > 0) {
+                console.log(`[Bookings API] Auto-completed ${updateResult.rowCount} expired bookings`);
+            }
+
             // Join with branches to get branch name (aliased as 'branch' for frontend compatibility)
             // also allow branch_id if needed, but existing frontend uses 'branch' string.
             const query = `

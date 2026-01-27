@@ -234,6 +234,7 @@ export default function AdminPage() {
     };
 
     const handleEditClick = (booking: Reservation) => {
+        if (booking.status === 'completed') return;
         setEditingBooking(booking);
         setEditForm({
             table_number: booking.table_number || "",
@@ -826,8 +827,11 @@ export default function AdminPage() {
                                             {filteredReservations.map((res) => (
                                                 <tr
                                                     key={res.id}
-                                                    className="hover:bg-white/5 transition-colors cursor-pointer"
-                                                    onClick={() => handleEditClick(res)}
+                                                    className={cn(
+                                                        "transition-colors",
+                                                        res.status === 'completed' ? "opacity-60 cursor-not-allowed" : "hover:bg-white/5 cursor-pointer"
+                                                    )}
+                                                    onClick={() => res.status !== 'completed' && handleEditClick(res)}
                                                 >
                                                     <td className="p-6">
                                                         <span className={cn(
@@ -951,8 +955,17 @@ export default function AdminPage() {
                                         <input
                                             type="date"
                                             required
+                                            min={new Date().toISOString().split('T')[0]}
                                             value={bookingForm.date}
-                                            onChange={e => setBookingForm({ ...bookingForm, date: e.target.value })}
+                                            onChange={e => {
+                                                const selectedDate = new Date(e.target.value);
+                                                if (selectedDate.getDay() === 1) { // 1 is Monday
+                                                    alert("Restaurant is closed on Mondays.");
+                                                    setBookingForm({ ...bookingForm, date: "" });
+                                                } else {
+                                                    setBookingForm({ ...bookingForm, date: e.target.value });
+                                                }
+                                            }}
                                             className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
                                         />
                                     </div>
@@ -1113,8 +1126,17 @@ export default function AdminPage() {
                                         <label className="block text-sm font-medium text-neutral-400 mb-2">Date</label>
                                         <input
                                             type="date"
+                                            min={new Date().toISOString().split('T')[0]}
                                             value={editForm.date}
-                                            onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                                            onChange={e => {
+                                                const selectedDate = new Date(e.target.value);
+                                                if (selectedDate.getDay() === 1) { // 1 is Monday
+                                                    alert("Restaurant is closed on Mondays.");
+                                                    setEditForm({ ...editForm, date: "" });
+                                                } else {
+                                                    setEditForm({ ...editForm, date: e.target.value });
+                                                }
+                                            }}
                                             className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white"
                                         />
                                     </div>

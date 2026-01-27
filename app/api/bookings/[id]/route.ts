@@ -11,8 +11,23 @@ export async function PATCH(
         const body = await request.json();
 
         // Destructure possible fields
-        const { table_number, status, time, end_time, guests } = body;
-        console.log(`[Bookings API] PATCH /${id} - Update request:`, { table_number, status, time, end_time, guests });
+        const { table_number, status, time, end_time, guests, date } = body;
+
+        if (date) {
+            const selectedDate = new Date(date);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (selectedDate < today) {
+                return NextResponse.json({ error: 'Cannot book in the past' }, { status: 400 });
+            }
+
+            if (selectedDate.getDay() === 1) { // 1 is Monday
+                return NextResponse.json({ error: 'Restaurant is closed on Mondays' }, { status: 400 });
+            }
+        }
+
+        console.log(`[Bookings API] PATCH /${id} - Update request:`, { table_number, status, time, end_time, guests, date });
 
         const client = await pool.connect();
         try {
@@ -67,6 +82,10 @@ export async function PATCH(
             if (guests !== undefined) {
                 updates.push(`guests = $${idx++}`);
                 values.push(parseInt(guests));
+            }
+            if (date !== undefined) {
+                updates.push(`date = $${idx++}`);
+                values.push(date);
             }
 
             if (updates.length === 0) {

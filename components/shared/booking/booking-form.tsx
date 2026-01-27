@@ -180,8 +180,18 @@ export default function BookingForm() {
                         <input
                             type="date"
                             required
+                            min={new Date().toISOString().split('T')[0]}
+                            value={formData.date}
                             className={inputClasses}
-                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            onChange={(e) => {
+                                const selectedDate = new Date(e.target.value);
+                                if (selectedDate.getDay() === 1) { // 1 is Monday
+                                    alert("Our restaurant is closed on Mondays. Please select another day.");
+                                    setFormData({ ...formData, date: "" });
+                                } else {
+                                    setFormData({ ...formData, date: e.target.value });
+                                }
+                            }}
                         />
                         <CalendarIcon className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" size={18} />
                     </div>
