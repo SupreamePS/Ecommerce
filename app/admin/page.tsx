@@ -827,11 +827,8 @@ export default function AdminPage() {
                                             {filteredReservations.map((res) => (
                                                 <tr
                                                     key={res.id}
-                                                    className={cn(
-                                                        "transition-colors",
-                                                        res.status === 'completed' ? "opacity-60 cursor-not-allowed" : "hover:bg-white/5 cursor-pointer"
-                                                    )}
-                                                    onClick={() => res.status !== 'completed' && handleEditClick(res)}
+                                                    className="hover:bg-white/5 transition-colors cursor-pointer"
+                                                    onClick={() => handleEditClick(res)}
                                                 >
                                                     <td className="p-6">
                                                         <span className={cn(
